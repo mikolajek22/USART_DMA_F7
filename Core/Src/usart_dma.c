@@ -18,41 +18,33 @@ UART_HandleTypeDef *huartHandler;
 
 HAL_StatusTypeDef uart_Send();
 
-// Receiving done - CB
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
-	if(huart->Instance == USART6) {
-
-		static uint8_t start = 0;
-		// assuming that data can be send with delays - CB from IDLE
-		static uint8_t tempBuf[MAX_FRAME_SIZE];
-		static uint8_t tempPos = 0;
-
-		for (uint8_t i = 0; i < Size; i++) {
-			// do not save trash data to RB
-			if (rcvBuffer[i] == SOF_CHAR || start == 1) {
-				start = 1;
-				// save in temp buffer - prevent RB from corrupted frames
-				tempBuf[tempPos++] = rcvBuffer[i];
-				if (rcvBuffer[i] == EOF_CHAR) {
-					for (uint8_t j = 0; j < tempPos; j++) {
-						RB_write(&ringBufRx, tempBuf[j]);
-					}
-					// ready to parse
-					frameEndCnt++;
-					tempPos = 0;
-				}
-				else if (tempPos > MAX_FRAME_SIZE) {
-					/* ERROR - frame is bigger than expected */
-					start = 0;
-					tempPos = 0;
-				}
-			}
-		}
+void HAL_UART_CMF_CB(UART_HandleTypeDef *huart) {
+	uint16_t static prevPos;
+	uint16_t static actPos;
+	actPos = MAX_RCV_SIZE - __HAL_DMA_GET_COUNTER(huart->hdmarx);
+	/* calculate expected frame size - start searching SOF from -167 bytes if data to process if greater than maximum frame size */
+	uint16_t expectedFrSize = (actPos >= prevPos) ? (actPos - prevPos) : (actPos + MAX_RCV_SIZE - prevPos);
+	if (expectedFrSize > MAX_FRAME_SIZE) {
+		expectedFrSize = MAX_FRAME_SIZE;
+		prevPos = (actPos > MAX_FRAME_SIZE) ? (actPos - MAX_FRAME_SIZE) : (MAX_RCV_SIZE - (MAX_FRAME_SIZE - actPos));
 	}
 
-	HAL_UARTEx_ReceiveToIdle_DMA(huartHandler, rcvBuffer, MAX_RCV_SIZE);
-	__HAL_DMA_DISABLE_IT(huartHandler->hdmarx, DMA_IT_HT);
+	uint8_t idx = 0;
+	uint8_t start = 0;
+	do {
+		if (rcvBuffer[prevPos] == SOF_CHAR || start) {
+			start = 1;
+			RB_write(&ringBufRx, rcvBuffer[prevPos]);
+		}
+		idx++;
+		prevPos++;
+		if (prevPos >= MAX_RCV_SIZE) {prevPos = 0;}
+	} while (idx < expectedFrSize);
+	if (start) {
+		frameEndCnt++;
+	}
 }
+
 
 // Sending done - CB
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
@@ -73,8 +65,8 @@ void usart_dma_init(UART_HandleTypeDef *huart) {
 	huartHandler = huart;
 
 	/* Disable callback from receiving half of the expected data*/
-	HAL_UARTEx_ReceiveToIdle_DMA(huartHandler, rcvBuffer, MAX_RCV_SIZE);
-	__HAL_DMA_DISABLE_IT(huartHandler->hdmarx, DMA_IT_HT);
+	HAL_UART_Receive_DMA(huartHandler, rcvBuffer, MAX_RCV_SIZE);
+		__HAL_DMA_DISABLE_IT(huartHandler->hdmarx, DMA_IT_HT);
 }
 
 

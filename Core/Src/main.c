@@ -264,6 +264,10 @@ static void MX_USART6_UART_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN USART6_Init 2 */
+  __HAL_UART_DISABLE(&huart6);
+  MODIFY_REG(huart6.Instance->CR2, USART_CR2_ADD, (191 << USART_CR2_ADD_Pos));
+  SET_BIT(huart6.Instance->CR1, USART_CR1_CMIE);
+  __HAL_UART_ENABLE(&huart6);
 
   /* USER CODE END USART6_Init 2 */
 

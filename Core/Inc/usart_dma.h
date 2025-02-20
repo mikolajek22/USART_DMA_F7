@@ -14,7 +14,7 @@
 
 //void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size);
 //void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart);
-
+void HAL_UART_CMF_CB(UART_HandleTypeDef *huart);
 HAL_StatusTypeDef usart_dma_SendFrame(uint8_t *pData, size_t size);
 usartMessage_t usart_dma_frameProcess();
 void usart_dma_init(UART_HandleTypeDef *huart);
